@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>QueryLab</title>
+    <style>
+        table, th, td { border: 1px solid black; border-collapse: collapse; padding: 5px; }
+        th { background-color: #eee; }
+    </style>
+</head>
+<body>
+<h1>QueryLab SQL Sandbox</h1>
+
+<textarea id="query" rows="10" cols="60"></textarea><br>
+<button onclick="runQuery()">Run Query</button>
+
+<h2>Results:</h2>
+<div id="result"></div>
+
+<script>
+let sessionID = null;
+
+fetch("/api/session")
+  .then(res => res.json())
+  .then(data => { sessionID = data.session_id; });
+
+function runQuery() {
+    const query = document.getElementById("query").value;
+    if (!sessionID) return alert("Session not ready");
+
+    fetch("/api/query", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: sessionID, query: query })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.error) {
+            document.getElementById("result").innerHTML = "<p style='color:red'>" + data.error + "</p>";
+            return;
+        }
+        let html = "<table><tr>";
+        data.columns.forEach(col => html += "<th>" + col + "</th>");
+        html += "</tr>";
+        data.rows.forEach(row => {
+            html += "<tr>";
+            row.forEach(val => html += "<td>" + val + "</td>");
+            html += "</tr>";
+        });
+        html += "</table>";
+        document.getElementById("result").innerHTML = html;
+    });
+}
+</script>
+</body>
+</html>
