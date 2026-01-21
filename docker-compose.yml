@@ -1,0 +1,32 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: querylab-postgres
+    restart: always
+    env_file:
+      - .env
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/init-roles.sql:/docker-entrypoint-initdb.d/init-roles.sql
+      - ./docker/init-roles.sh:/docker-entrypoint-initdb.d/init-roles.sh
+      - ./init.sql:/app/init.sql
+    ports:
+      - "5432:5432"
+
+  querylab:
+    build: .
+    container_name: querylab-app
+    depends_on:
+      - postgres
+    env_file:
+      - .env
+    volumes:
+      - ./frontend:/app/frontend
+      - ./init.sql:/app/init.sql
+    ports:
+      - "8080:8080"
+
+volumes:
+  pgdata:
