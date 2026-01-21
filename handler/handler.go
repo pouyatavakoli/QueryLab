@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 
 	_ "github.com/lib/pq"
@@ -30,79 +29,67 @@ type QueryResponse struct {
 	Error   string          `json:"error,omitempty"`
 }
 
-func (h *Handler) CreateSession(w http.ResponseWriter, r *http.Request) {
-	sessionID := h.Sandbox.GenerateSessionID()
-	_, err := h.Sandbox.CreateSandbox(sessionID)
-	if err != nil {
-		http.Error(w, "Failed to create sandbox", http.StatusInternalServerError)
+func (h *Handler) CreateSession(w http.ResponseWriter, _ *http.Request) {
+	id := h.Sandbox.GenerateSessionID()
+	if _, err := h.Sandbox.CreateSandbox(id); err != nil {
+		http.Error(w, "sandbox creation failed", 500)
 		return
 	}
-	resp := map[string]string{"session_id": sessionID}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+	json.NewEncoder(w).Encode(map[string]string{"session_id": id})
 }
 
 func (h *Handler) RunQuery(w http.ResponseWriter, r *http.Request) {
 	var req QueryRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid request", http.StatusBadRequest)
+		http.Error(w, "bad request", 400)
 		return
 	}
 
 	dbName, ok := h.Sandbox.GetDB(req.SessionID)
 	if !ok {
-		http.Error(w, "invalid session", http.StatusBadRequest)
+		http.Error(w, "invalid session", 400)
 		return
 	}
 
+	cfg := h.Sandbox.Config()
 	connStr := fmt.Sprintf(
 		"host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
-		h.Sandbox.Config().Host,
-		h.Sandbox.Config().Port,
-		h.Sandbox.Config().User,
-		h.Sandbox.Config().Password,
+		cfg.Host,
+		cfg.Port,
+		cfg.SandboxUser,
+		cfg.SandboxPassword,
 		dbName,
 	)
+
 	dbConn, err := sql.Open("postgres", connStr)
 	if err != nil {
-		http.Error(w, "db connection failed", http.StatusInternalServerError)
+		http.Error(w, "db connection failed", 500)
 		return
 	}
 	defer dbConn.Close()
 
 	rows, err := dbConn.Query(req.Query)
 	if err != nil {
-		resp := QueryResponse{Error: err.Error()}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		json.NewEncoder(w).Encode(QueryResponse{Error: err.Error()})
 		return
 	}
 	defer rows.Close()
 
-	cols, err := rows.Columns()
-	if err != nil {
-		http.Error(w, "failed to get columns", http.StatusInternalServerError)
-		return
-	}
+	cols, _ := rows.Columns()
+	var out [][]interface{}
 
-	var results [][]interface{}
 	for rows.Next() {
-		colData := make([]interface{}, len(cols))
-		colPtrs := make([]interface{}, len(cols))
-		for i := range colData {
-			colPtrs[i] = &colData[i]
+		row := make([]interface{}, len(cols))
+		ptrs := make([]interface{}, len(cols))
+		for i := range row {
+			ptrs[i] = &row[i]
 		}
-		if err := rows.Scan(colPtrs...); err != nil {
-			log.Println("scan error:", err)
-			continue
-		}
-		results = append(results, colData)
+		rows.Scan(ptrs...)
+		out = append(out, row)
 	}
 
-	resp := QueryResponse{
+	json.NewEncoder(w).Encode(QueryResponse{
 		Columns: cols,
-		Rows:    results,
-	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
+		Rows:    out,
+	})
 }

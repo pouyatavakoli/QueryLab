@@ -12,23 +12,24 @@ import (
 	_ "github.com/lib/pq"
 )
 
+type DBConfig struct {
+	Host string
+	Port string
+
+	AdminUser     string
+	AdminPassword string
+
+	SandboxUser     string
+	SandboxPassword string
+
+	BaseDB  string
+	InitSQL string
+}
+
 type SandboxManager struct {
 	mu        sync.Mutex
 	sandboxes map[string]string
 	config    *DBConfig
-}
-
-type DBConfig struct {
-	Host     string
-	Port     string
-	User     string
-	Password string
-	BaseDB   string
-	InitSQL  string
-}
-
-func (s *SandboxManager) Config() DBConfig {
-	return *s.config
 }
 
 func NewSandboxManager(cfg *DBConfig) *SandboxManager {
@@ -38,16 +39,10 @@ func NewSandboxManager(cfg *DBConfig) *SandboxManager {
 	}
 }
 
-func (s *SandboxManager) randomString(n int) string {
-	const letters = "abcdefghijklmnopqrstuvwxyz"
-	b := make([]byte, n)
-	for i := range b {
-		b[i] = letters[rand.Intn(len(letters))]
-	}
-	return string(b)
+func (s *SandboxManager) Config() DBConfig {
+	return *s.config
 }
 
-// Generate session ID: random string + timestamp
 func (s *SandboxManager) GenerateSessionID() string {
 	return fmt.Sprintf("%s_%d", s.randomString(8), time.Now().Unix())
 }
@@ -56,19 +51,21 @@ func (s *SandboxManager) CreateSandbox(sessionID string) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Drop old sandbox
-	if oldDB, ok := s.sandboxes[sessionID]; ok {
-		if err := s.dropDB(oldDB); err != nil {
-			log.Println("failed to drop old sandbox:", err)
-		}
+	if old, ok := s.sandboxes[sessionID]; ok {
+		_ = s.dropDB(old)
 	}
 
-	dbName := fmt.Sprintf("sandbox_%s", s.randomString(6))
+	dbName := "sandbox_" + s.randomString(6)
+
 	if err := s.createDB(dbName); err != nil {
 		return "", err
 	}
 
 	if err := s.initDB(dbName); err != nil {
+		return "", err
+	}
+
+	if err := s.grantSandboxPrivileges(dbName); err != nil {
 		return "", err
 	}
 
@@ -79,54 +76,95 @@ func (s *SandboxManager) CreateSandbox(sessionID string) (string, error) {
 func (s *SandboxManager) GetDB(sessionID string) (string, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	dbName, ok := s.sandboxes[sessionID]
-	return dbName, ok
+	db, ok := s.sandboxes[sessionID]
+	return db, ok
+}
+
+func (s *SandboxManager) adminConn(dbName string) (*sql.DB, error) {
+	conn := fmt.Sprintf(
+		"host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
+		s.config.Host,
+		s.config.Port,
+		s.config.AdminUser,
+		s.config.AdminPassword,
+		dbName,
+	)
+	return sql.Open("postgres", conn)
 }
 
 func (s *SandboxManager) createDB(name string) error {
-	connStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
-		s.config.Host, s.config.Port, s.config.User, s.config.Password, s.config.BaseDB)
-	dbConn, err := sql.Open("postgres", connStr)
+	db, err := s.adminConn(s.config.BaseDB)
 	if err != nil {
 		return err
 	}
-	defer dbConn.Close()
+	defer db.Close()
 
-	_, err = dbConn.Exec(fmt.Sprintf("CREATE DATABASE %s;", name))
+	_, err = db.Exec(fmt.Sprintf(
+		"CREATE DATABASE %s OWNER %s",
+		name,
+		s.config.AdminUser,
+	))
 	return err
 }
 
 func (s *SandboxManager) dropDB(name string) error {
-	connStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
-		s.config.Host, s.config.Port, s.config.User, s.config.Password, s.config.BaseDB)
-	dbConn, err := sql.Open("postgres", connStr)
+	db, err := s.adminConn(s.config.BaseDB)
 	if err != nil {
 		return err
 	}
-	defer dbConn.Close()
+	defer db.Close()
 
-	_, err = dbConn.Exec(fmt.Sprintf("DROP DATABASE IF EXISTS %s;", name))
+	_, err = db.Exec(fmt.Sprintf("DROP DATABASE IF EXISTS %s", name))
 	return err
 }
 
 func (s *SandboxManager) initDB(name string) error {
-	connStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
-		s.config.Host, s.config.Port, s.config.User, s.config.Password, name)
-	dbConn, err := sql.Open("postgres", connStr)
+	db, err := s.adminConn(name)
 	if err != nil {
 		return err
 	}
-	defer dbConn.Close()
+	defer db.Close()
 
 	sqlBytes, err := os.ReadFile(s.config.InitSQL)
 	if err != nil {
-		return fmt.Errorf("failed to read init.sql: %w", err)
+		return err
 	}
 
-	_, err = dbConn.Exec(string(sqlBytes))
+	_, err = db.Exec(string(sqlBytes))
+	return err
+}
+
+func (s *SandboxManager) grantSandboxPrivileges(dbName string) error {
+	db, err := s.adminConn(dbName)
 	if err != nil {
-		return fmt.Errorf("failed to initialize sandbox: %w", err)
+		return err
+	}
+	defer db.Close()
+
+	stmts := []string{
+		fmt.Sprintf("GRANT CONNECT ON DATABASE %s TO %s", dbName, s.config.SandboxUser),
+		fmt.Sprintf("GRANT USAGE ON SCHEMA public TO %s", s.config.SandboxUser),
+		fmt.Sprintf("GRANT SELECT ON ALL TABLES IN SCHEMA public TO %s", s.config.SandboxUser),
+		fmt.Sprintf(`
+			ALTER DEFAULT PRIVILEGES IN SCHEMA public
+			GRANT SELECT ON TABLES TO %s
+		`, s.config.SandboxUser),
 	}
 
+	for _, stmt := range stmts {
+		if _, err := db.Exec(stmt); err != nil {
+			log.Println("grant error:", err)
+			return err
+		}
+	}
 	return nil
+}
+
+func (s *SandboxManager) randomString(n int) string {
+	const letters = "abcdefghijklmnopqrstuvwxyz"
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = letters[rand.Intn(len(letters))]
+	}
+	return string(b)
 }

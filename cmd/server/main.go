@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 
@@ -13,22 +12,27 @@ import (
 func main() {
 	cfg := config.LoadConfig()
 
-	dbCfg := &db.DBConfig{
-		Host:     cfg.DBHost,
-		Port:     cfg.DBPort,
-		User:     cfg.DBUser,
-		Password: cfg.DBPassword,
-		BaseDB:   cfg.DBName,
-		InitSQL:  cfg.InitSQL,
-	}
-	sandbox := db.NewSandboxManager(dbCfg)
+	sandbox := db.NewSandboxManager(&db.DBConfig{
+		Host: cfg.DBHost,
+		Port: cfg.DBPort,
+
+		AdminUser:     cfg.DBAdminUser,
+		AdminPassword: cfg.DBAdminPassword,
+
+		SandboxUser:     cfg.DBSandboxUser,
+		SandboxPassword: cfg.DBSandboxPassword,
+
+		BaseDB:  cfg.DBName,
+		InitSQL: cfg.InitSQL,
+	})
+
 	h := handler.NewHandler(sandbox)
 
 	http.Handle("/", http.FileServer(http.Dir("./frontend")))
 	http.HandleFunc("/api/session", h.CreateSession)
 	http.HandleFunc("/api/query", h.RunQuery)
 
-	addr := fmt.Sprintf(":%s", cfg.ServerPort)
-	log.Println("QueryLab server running on", addr)
+	addr := ":" + cfg.ServerPort
+	log.Println("QueryLab listening on", addr)
 	log.Fatal(http.ListenAndServe(addr, nil))
 }

@@ -8,10 +8,15 @@ import (
 )
 
 type Config struct {
-	DBHost     string
-	DBPort     string
-	DBUser     string
-	DBPassword string
+	DBHost string
+	DBPort string
+
+	DBAdminUser     string
+	DBAdminPassword string
+
+	DBSandboxUser     string
+	DBSandboxPassword string
+
 	DBName     string
 	ServerPort string
 	InitSQL    string
@@ -23,10 +28,15 @@ func LoadConfig() *Config {
 	}
 
 	return &Config{
-		DBHost:     getEnv("DB_HOST", "localhost"),
-		DBPort:     getEnv("DB_PORT", "5432"),
-		DBUser:     getEnv("DB_USER", "postgres"),
-		DBPassword: getEnv("DB_PASSWORD", "postgres"),
+		DBHost: getEnv("DB_HOST", "localhost"),
+		DBPort: getEnv("DB_PORT", "5432"),
+
+		DBAdminUser:     getEnv("DB_ADMIN_USER", ""),
+		DBAdminPassword: getEnv("DB_ADMIN_PASSWORD", ""),
+
+		DBSandboxUser:     getEnv("DB_SANDBOX_USER", ""),
+		DBSandboxPassword: getEnv("DB_SANDBOX_PASSWORD", ""),
+
 		DBName:     getEnv("DB_NAME", "querylab"),
 		ServerPort: getEnv("SERVER_PORT", "8080"),
 		InitSQL:    getEnv("INIT_SQL", "init.sql"),
@@ -34,8 +44,8 @@ func LoadConfig() *Config {
 }
 
 func getEnv(key, fallback string) string {
-	if val := os.Getenv(key); val != "" {
-		return val
+	if v := os.Getenv(key); v != "" {
+		return v
 	}
 	return fallback
 }
