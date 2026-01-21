@@ -27,6 +27,10 @@ type DBConfig struct {
 	InitSQL  string
 }
 
+func (s *SandboxManager) Config() DBConfig {
+	return *s.config
+}
+
 func NewSandboxManager(cfg *DBConfig) *SandboxManager {
 	return &SandboxManager{
 		sandboxes: make(map[string]string),
