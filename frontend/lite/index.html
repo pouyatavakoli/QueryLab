@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>QueryLab Lite - SQL Sandbox</title>
+    <style>
+      body {
+        font-family: monospace;
+        background: #f5f5f5;
+        margin: 0;
+        padding: 20px;
+        color: #222;
+      }
+      header {
+        margin-bottom: 15px;
+      }
+      h1 {
+        font-size: 1.5rem;
+      }
+      textarea {
+        width: 100%;
+        min-height: 150px;
+        font-family: monospace;
+        font-size: 14px;
+        padding: 10px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        resize: vertical;
+      }
+      button {
+        margin-top: 10px;
+        padding: 8px 16px;
+        font-size: 14px;
+        cursor: pointer;
+        border-radius: 4px;
+        border: none;
+        background-color: #3498db;
+        color: white;
+      }
+      button:hover {
+        background-color: #2980b9;
+      }
+      #result {
+        margin-top: 20px;
+        background: white;
+        padding: 10px;
+        border-radius: 4px;
+        max-height: 400px;
+        overflow: auto;
+        border: 1px solid #ccc;
+      }
+      #popup {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        min-width: 250px;
+        padding: 10px 15px;
+        border-radius: 5px;
+        color: white;
+        font-weight: 600;
+        display: none;
+        z-index: 1000;
+        background: #3498db;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+      }
+      th,
+      td {
+        border: 1px solid #ddd;
+        padding: 5px;
+      }
+      th {
+        background: #eee;
+      }
+      tr:hover {
+        background: #f1f1f1;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>QueryLab Lite - SQL Sandbox</h1>
+    </header>
+
+    <textarea id="query" placeholder="Enter SQL query here..."></textarea>
+    <br />
+    <button id="runQueryBtn">Run Query (Ctrl+Enter)</button>
+    <button id="clearQueryBtn">Clear Query</button>
+    <button id="clearSessionBtn">Clear Session</button>
+
+    <div id="result">Query results will appear here...</div>
+    <div id="popup"></div>
+
+    <script src="../app.js"></script>
+    <script>
+      document.addEventListener("DOMContentLoaded", () => {
+        // Override setLoading to avoid icons
+        QueryLabApp.setLoading = function (isLoading) {
+          this.isLoading = isLoading;
+          const button = document.getElementById("runQueryBtn");
+          button.disabled = isLoading;
+          button.textContent = isLoading
+            ? "Running..."
+            : "Run Query (Ctrl+Enter)";
+        };
+
+        // Initialize app
+        QueryLabApp.init();
+      });
+    </script>
+    <footer>
+      <p>
+        Made with <span style="color: red">❤️</span> by
+        <a href="https://github.com/pouyatavakoli" target="_blank">Pouya</a>
+      </p>
+      <p>QueryLab &copy; 2026 | Built with Go</p>
+    </footer>
+  </body>
+</html>

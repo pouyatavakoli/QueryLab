@@ -62,6 +62,9 @@ func main() {
 	http.HandleFunc("/api/logout", h.Logout)
 	http.HandleFunc("/api/health", h.HealthCheck)
 
+	// lite frontend version
+	http.Handle("/lite/", http.StripPrefix("/lite/", http.FileServer(http.Dir("frontend/lite"))))
+
 	slog.Info("HTTP routes registered",
 		"static_files", "./frontend",
 		"api_endpoints", []string{

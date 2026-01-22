@@ -10,6 +10,7 @@ QueryLab is a lightweight SQL sandbox built in Go that allows users to safely ru
 - Easy setup with Go and PostgreSQL
 - Configurable via `.env` file
 - Lightweight and minimal dependencies
+- `lite` version for minimal fronted
 
 
 ## Prerequisites
@@ -90,6 +91,7 @@ go run cmd/server/main.go
 
 * The server will start on the port defined in `.env` (default `8080`).
 * Open a browser and visit: `http://localhost:8080` to access the query interface.
+* you can visit `http://localhost:8080/lite` to see the minimal version (suggested for slow internet connection)
 
 
 ## Usage
