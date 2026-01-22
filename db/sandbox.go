@@ -3,7 +3,7 @@ package db
 import (
 	"database/sql"
 	"fmt"
-	"log"
+	"log/slog"
 	"math/rand"
 	"os"
 	"sync"
@@ -58,14 +58,17 @@ func (s *SandboxManager) CreateSandbox(sessionID string) (string, error) {
 	dbName := "sandbox_" + s.randomString(6)
 
 	if err := s.createDB(dbName); err != nil {
+		slog.Error("failed to create database", "dbName", dbName, "error", err)
 		return "", err
 	}
 
 	if err := s.initDB(dbName); err != nil {
+		slog.Error("failed to init database", "dbName", dbName, "error", err)
 		return "", err
 	}
 
 	if err := s.grantSandboxPrivileges(dbName); err != nil {
+		slog.Error("failed to grant sandbox privileges", "dbName", dbName, "error", err)
 		return "", err
 	}
 
@@ -95,6 +98,7 @@ func (s *SandboxManager) adminConn(dbName string) (*sql.DB, error) {
 func (s *SandboxManager) createDB(name string) error {
 	db, err := s.adminConn(s.config.BaseDB)
 	if err != nil {
+		slog.Error("failed to connect to base db", "dbName", s.config.BaseDB, "error", err)
 		return err
 	}
 	defer db.Close()
@@ -110,6 +114,7 @@ func (s *SandboxManager) createDB(name string) error {
 func (s *SandboxManager) dropDB(name string) error {
 	db, err := s.adminConn(s.config.BaseDB)
 	if err != nil {
+		slog.Error("failed to connect to base db", "dbName", s.config.BaseDB, "error", err)
 		return err
 	}
 	defer db.Close()
@@ -121,12 +126,14 @@ func (s *SandboxManager) dropDB(name string) error {
 func (s *SandboxManager) initDB(name string) error {
 	db, err := s.adminConn(name)
 	if err != nil {
+		slog.Error("failed to connect to db", "dbName", name, "error", err)
 		return err
 	}
 	defer db.Close()
 
 	sqlBytes, err := os.ReadFile(s.config.InitSQL)
 	if err != nil {
+		slog.Error("failed to read init SQL file", "file", s.config.InitSQL, "error", err)
 		return err
 	}
 
@@ -137,6 +144,7 @@ func (s *SandboxManager) initDB(name string) error {
 func (s *SandboxManager) grantSandboxPrivileges(dbName string) error {
 	db, err := s.adminConn(dbName)
 	if err != nil {
+		slog.Error("failed to connect to db", "dbName", dbName, "error", err)
 		return err
 	}
 	defer db.Close()
@@ -153,7 +161,7 @@ func (s *SandboxManager) grantSandboxPrivileges(dbName string) error {
 
 	for _, stmt := range stmts {
 		if _, err := db.Exec(stmt); err != nil {
-			log.Println("grant error:", err)
+			slog.Error("grant error", "statement", stmt, "error", err)
 			return err
 		}
 	}
