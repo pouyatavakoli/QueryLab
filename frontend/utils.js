@@ -64,3 +64,14 @@ const QueryLabUtils = {
         window.history.pushState({}, '', url);
     }
 };
+
+function showPopup(message, type = "info", duration = 4000) {
+    const popup = document.getElementById("popup");
+    popup.textContent = message;
+    popup.className = `popup ${type}`;
+    popup.style.display = "block";
+
+    setTimeout(() => {
+        popup.style.display = "none";
+    }, duration);
+}

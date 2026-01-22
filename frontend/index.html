@@ -4,232 +4,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>QueryLab - SQL Sandbox</title>
+    <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
-            background-color: #f5f7fa;
-        }
-        
-        header {
-            margin-bottom: 30px;
-            padding-bottom: 15px;
-            border-bottom: 1px solid #ddd;
-        }
-        
-        h1 {
-            color: #2c3e50;
-            margin-bottom: 10px;
-        }
-        
-        .subtitle {
-            color: #7f8c8d;
-            font-size: 1.1rem;
-        }
-        
-        .session-info {
-            background-color: #e8f4fd;
-            padding: 10px 15px;
-            border-radius: 5px;
-            margin-bottom: 20px;
-            font-size: 0.9rem;
-            border-left: 4px solid #3498db;
-        }
-        
-        .query-section {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            margin-bottom: 30px;
-        }
-        
-        .query-controls {
-            display: flex;
-            gap: 10px;
-            margin-top: 15px;
-        }
-        
-        button {
-            padding: 10px 20px;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-weight: 600;
-            transition: all 0.2s;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        
-        .btn-primary {
-            background-color: #3498db;
-            color: white;
-        }
-        
-        .btn-primary:hover {
-            background-color: #2980b9;
-        }
-        
-        .btn-secondary {
-            background-color: #ecf0f1;
-            color: #34495e;
-        }
-        
-        .btn-secondary:hover {
-            background-color: #d5dbdb;
-        }
-        
-        .btn-danger {
-            background-color: #e74c3c;
-            color: white;
-        }
-        
-        .btn-danger:hover {
-            background-color: #c0392b;
-        }
-        
-        button:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-        }
-        
-        textarea {
-            width: 100%;
-            padding: 15px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            font-family: 'Courier New', monospace;
-            font-size: 14px;
-            resize: vertical;
-            min-height: 150px;
-        }
-        
-        textarea:focus {
-            outline: none;
-            border-color: #3498db;
-            box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.2);
-        }
-        
-        .results-section {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        
-        .message {
-            padding: 12px 15px;
-            border-radius: 5px;
-            margin-bottom: 15px;
-            display: none;
-        }
-        
-        .message.success {
-            background-color: #d4edda;
-            color: #155724;
-            border-left: 4px solid #28a745;
-        }
-        
-        .message.error {
-            background-color: #f8d7da;
-            color: #721c24;
-            border-left: 4px solid #dc3545;
-        }
-        
-        .message.warning {
-            background-color: #fff3cd;
-            color: #856404;
-            border-left: 4px solid #ffc107;
-        }
-        
-        .message.info {
-            background-color: #d1ecf1;
-            color: #0c5460;
-            border-left: 4px solid #17a2b8;
-        }
-        
-        .result-info {
-            margin-bottom: 15px;
-            color: #7f8c8d;
-            font-style: italic;
-        }
-        
-        .table-container {
-            overflow-x: auto;
-            max-height: 500px;
-            overflow-y: auto;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-        }
-        
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-        
-        th {
-            background-color: #f8f9fa;
-            padding: 12px 15px;
-            text-align: left;
-            font-weight: 600;
-            border-bottom: 2px solid #dee2e6;
-            position: sticky;
-            top: 0;
-        }
-        
-        td {
-            padding: 10px 15px;
-            border-bottom: 1px solid #dee2e6;
-        }
-        
-        tr:hover {
-            background-color: #f8f9fa;
-        }
-        
-        footer {
-            margin-top: 40px;
-            text-align: center;
-            color: #7f8c8d;
-            font-size: 0.9rem;
-            padding-top: 20px;
-            border-top: 1px solid #ddd;
-        }
-        
-        .tips {
-            margin-top: 20px;
-            padding: 15px;
-            background-color: #f8f9fa;
-            border-radius: 5px;
-            font-size: 0.9rem;
-        }
-        
-        .tips h3 {
-            margin-bottom: 10px;
-            color: #2c3e50;
-        }
-        
-        .tips ul {
-            padding-left: 20px;
-        }
-        
-        .tips li {
-            margin-bottom: 5px;
-        }
-    </style>
 </head>
 <body>
+    <!-- Top-right GitHub star -->
+    <div class="star-reminder-top">
+        <a href="https://github.com/pouyatavakoli/QueryLab" target="_blank">
+            <i class="fab fa-github"></i> Star on GitHub
+        </a>
+    </div>
+
     <header>
         <h1><i class="fas fa-database"></i> QueryLab SQL Sandbox</h1>
         <p class="subtitle">A safe, isolated environment for running SQL queries</p>
@@ -240,7 +25,7 @@
         Each session gets its own isolated PostgreSQL database. Old databases are automatically cleaned up on refresh.
     </div>
     
-    <div id="message" class="message"></div>
+    <div id="popup" class="popup"></div>
     
     <div class="query-section">
         <h2><i class="fas fa-terminal"></i> SQL Query Editor</h2>
@@ -282,11 +67,11 @@
     </div>
     
     <footer>
-        <p>QueryLab &copy; 2026 | Built with Go and PostgreSQL</p>
-        <p>Session-based isolated sandbox environment</p>
+        <p>Made with <span class="heart">❤️</span> by <a href="https://github.com/pouyatavakoli" target="_blank">Pouya</a></p>
+        <p>QueryLab &copy; 2026 | Built with <i class="fab fa-golang golang-icon"></i> </p>
     </footer>
     
-    <!-- JavaScript Files -->
+    <!-- JavaScript -->
     <script src="utils.js"></script>
     <script src="app.js"></script>
 </body>
