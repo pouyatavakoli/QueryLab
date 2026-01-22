@@ -14,6 +14,7 @@ sudo -u postgres psql -c "CREATE USER querylab_sandbox WITH PASSWORD 'sandbox-st
 # TODO
 - show only table header when table empty (currently shows nothing)
 - show loading process to user
+- move util functions out of main files
 - 
 
 

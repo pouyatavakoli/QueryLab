@@ -34,7 +34,6 @@ func main() {
 		"db_port", cfg.DBPort,
 	)
 
-	// Database session creation
 	slog.Info("initializing sandbox database manager")
 	sandbox := db.NewSandboxManager(&db.DBConfig{
 		Host: cfg.DBHost,
@@ -46,8 +45,9 @@ func main() {
 		SandboxUser:     cfg.DBSandboxUser,
 		SandboxPassword: cfg.DBSandboxPassword,
 
-		BaseDB:  cfg.DBName,
-		InitSQL: cfg.InitSQL,
+		BaseDB:         cfg.DBName,
+		InitSQL:        cfg.InitSQL,
+		SessionTimeout: 1 * time.Hour, // Sessions expire after 1 hour of inactivity
 	})
 	slog.Info("sandbox database manager initialized")
 
@@ -59,10 +59,17 @@ func main() {
 	http.Handle("/", http.FileServer(http.Dir("./frontend")))
 	http.HandleFunc("/api/session", h.CreateSession)
 	http.HandleFunc("/api/query", h.RunQuery)
+	http.HandleFunc("/api/logout", h.Logout)
+	http.HandleFunc("/api/health", h.HealthCheck)
 
 	slog.Info("HTTP routes registered",
 		"static_files", "./frontend",
-		"api_endpoints", []string{"/api/session", "/api/query"},
+		"api_endpoints", []string{
+			"/api/session",
+			"/api/query",
+			"/api/logout",
+			"/api/health",
+		},
 	)
 
 	// Server startup

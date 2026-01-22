@@ -24,37 +24,54 @@ type DBConfig struct {
 
 	BaseDB  string
 	InitSQL string
+
+	SessionTimeout time.Duration // Timeout for session cleanup
 }
 
 type SandboxManager struct {
-	mu        sync.Mutex
-	sandboxes map[string]string
+	mu        sync.RWMutex
+	sandboxes map[string]*sandboxEntry
 	config    *DBConfig
 }
 
+type sandboxEntry struct {
+	dbName       string
+	lastActivity time.Time
+}
+
 func NewSandboxManager(cfg *DBConfig) *SandboxManager {
-	return &SandboxManager{
-		sandboxes: make(map[string]string),
+	if cfg.SessionTimeout == 0 {
+		cfg.SessionTimeout = 1 * time.Hour // Default 1 hour
+	}
+
+	sm := &SandboxManager{
+		sandboxes: make(map[string]*sandboxEntry),
 		config:    cfg,
 	}
+
+	// Start cleanup goroutine
+	go sm.cleanupOldSandboxes()
+
+	return sm
 }
 
-func (s *SandboxManager) Config() DBConfig {
-	return *s.config
-}
-
-func (s *SandboxManager) GenerateSessionID() string {
-	return fmt.Sprintf("%s_%d", s.randomString(8), time.Now().Unix())
-}
-
-func (s *SandboxManager) CreateSandbox(sessionID string) (string, error) {
+// GetOrCreateSession gets existing session or creates a new one
+// Call this on page load/refresh to renew the session
+func (s *SandboxManager) GetOrCreateSession(sessionID string) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if old, ok := s.sandboxes[sessionID]; ok {
-		_ = s.dropDB(old)
+	// Check if session exists and is still valid
+	if entry, exists := s.sandboxes[sessionID]; exists {
+		// Clean up old database before creating new one
+		if err := s.dropDB(entry.dbName); err != nil {
+			slog.Warn("failed to drop old database", "dbName", entry.dbName, "error", err)
+		}
+		// Remove old entry
+		delete(s.sandboxes, sessionID)
 	}
 
+	// Generate new sandbox database
 	dbName := "sandbox_" + s.randomString(6)
 
 	if err := s.createDB(dbName); err != nil {
@@ -64,23 +81,114 @@ func (s *SandboxManager) CreateSandbox(sessionID string) (string, error) {
 
 	if err := s.initDB(dbName); err != nil {
 		slog.Error("failed to init database", "dbName", dbName, "error", err)
+		// Clean up on error
+		_ = s.dropDB(dbName)
 		return "", err
 	}
 
 	if err := s.grantSandboxPrivileges(dbName); err != nil {
 		slog.Error("failed to grant sandbox privileges", "dbName", dbName, "error", err)
+		// Clean up on error
+		_ = s.dropDB(dbName)
 		return "", err
 	}
 
-	s.sandboxes[sessionID] = dbName
+	// Store the new sandbox
+	s.sandboxes[sessionID] = &sandboxEntry{
+		dbName:       dbName,
+		lastActivity: time.Now(),
+	}
+
 	return dbName, nil
 }
 
-func (s *SandboxManager) GetDB(sessionID string) (string, bool) {
+// UpdateSessionActivity updates the last activity time for a session
+// Call this on user interactions to keep session alive
+func (s *SandboxManager) UpdateSessionActivity(sessionID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	db, ok := s.sandboxes[sessionID]
-	return db, ok
+
+	if entry, exists := s.sandboxes[sessionID]; exists {
+		entry.lastActivity = time.Now()
+	}
+}
+
+// GetDB gets the database name for a session
+func (s *SandboxManager) GetDB(sessionID string) (string, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	entry, ok := s.sandboxes[sessionID]
+	if !ok {
+		return "", false
+	}
+	return entry.dbName, true
+}
+
+// CleanupSession removes a session and its database
+// Call this when user explicitly logs out or exits
+func (s *SandboxManager) CleanupSession(sessionID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.cleanupSessionLocked(sessionID)
+}
+
+// cleanupSessionLocked does the actual cleanup (assumes lock is already held)
+func (s *SandboxManager) cleanupSessionLocked(sessionID string) error {
+	if entry, exists := s.sandboxes[sessionID]; exists {
+		if err := s.dropDB(entry.dbName); err != nil {
+			slog.Warn("failed to drop database on cleanup", "dbName", entry.dbName, "error", err)
+			// Continue to delete the entry even if drop fails
+		}
+		delete(s.sandboxes, sessionID)
+		slog.Info("cleaned up session", "sessionID", sessionID, "dbName", entry.dbName)
+	}
+	return nil
+}
+
+// cleanupOldSandboxes periodically cleans up inactive sessions
+func (s *SandboxManager) cleanupOldSandboxes() {
+	ticker := time.NewTicker(1 * time.Hour) // Check every hour
+	defer ticker.Stop()
+
+	for range ticker.C {
+		s.cleanupInactiveSessions()
+	}
+}
+
+// cleanupInactiveSessions removes sessions that have been inactive too long
+func (s *SandboxManager) cleanupInactiveSessions() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	cutoff := time.Now().Add(-s.config.SessionTimeout)
+	var toDelete []string
+
+	for sessionID, entry := range s.sandboxes {
+		if entry.lastActivity.Before(cutoff) {
+			toDelete = append(toDelete, sessionID)
+		}
+	}
+
+	for _, sessionID := range toDelete {
+		_ = s.cleanupSessionLocked(sessionID)
+	}
+
+	if len(toDelete) > 0 {
+		slog.Info("cleaned up inactive sessions", "count", len(toDelete))
+	}
+}
+
+// GenerateSessionID generates a unique session ID
+// Use this when a user first visits (e.g., set as cookie)
+func (s *SandboxManager) GenerateSessionID() string {
+	// Combine timestamp with random string for uniqueness
+	return fmt.Sprintf("%s_%d_%s",
+		s.randomString(6),
+		time.Now().UnixNano(),
+		s.randomString(4),
+	)
 }
 
 func (s *SandboxManager) adminConn(dbName string) (*sql.DB, error) {
@@ -175,4 +283,8 @@ func (s *SandboxManager) randomString(n int) string {
 		b[i] = letters[rand.Intn(len(letters))]
 	}
 	return string(b)
+}
+
+func (s *SandboxManager) Config() DBConfig {
+	return *s.config
 }
