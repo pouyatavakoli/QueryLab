@@ -142,7 +142,9 @@ func (s *SandboxManager) cleanupSessionLocked(sessionID string) error {
 
 // cleanupOldSandboxes periodically cleans up inactive sessions
 func (s *SandboxManager) cleanupOldSandboxes() {
-	ticker := time.NewTicker(1 * time.Hour) // Check every hour
+	interval := max(s.config.SessionTimeout/2, 10*time.Minute)
+
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	for range ticker.C {
@@ -158,9 +160,21 @@ func (s *SandboxManager) cleanupInactiveSessions() {
 	cutoff := time.Now().Add(-s.config.SessionTimeout)
 	var toDelete []string
 
+	//slog.Info("checking sessions ...")
 	for sessionID, entry := range s.sandboxes {
+		slog.Info("session check",
+			"sessionID", sessionID,
+			"lastActivity", entry.lastActivity,
+			"age", time.Since(entry.lastActivity),
+			"timeout", s.config.SessionTimeout,
+		)
 		if entry.lastActivity.Before(cutoff) {
 			toDelete = append(toDelete, sessionID)
+			slog.Info("session expired",
+				"sessionID", sessionID,
+				"dbName", entry.dbName,
+				"lastActivity", entry.lastActivity,
+			)
 		}
 	}
 
@@ -174,7 +188,6 @@ func (s *SandboxManager) cleanupInactiveSessions() {
 }
 
 // GenerateSessionID generates a unique session ID
-// Use this when a user first visits (e.g., set as cookie)
 func (s *SandboxManager) GenerateSessionID() string {
 	// Combine timestamp with random string for uniqueness
 	return fmt.Sprintf("%s_%d_%s",
@@ -239,7 +252,6 @@ func (s *SandboxManager) dropDB(name string) error {
 	slog.Info("database dropped successfully", "dbName", name)
 	return nil
 }
-
 
 func (s *SandboxManager) initDB(name string) error {
 	db, err := s.adminConn(name)
