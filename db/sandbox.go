@@ -258,13 +258,30 @@ func (s *SandboxManager) grantSandboxPrivileges(dbName string) error {
 	defer db.Close()
 
 	stmts := []string{
-		fmt.Sprintf("GRANT CONNECT ON DATABASE %s TO %s", dbName, s.config.SandboxUser),
-		fmt.Sprintf("GRANT USAGE ON SCHEMA public TO %s", s.config.SandboxUser),
-		fmt.Sprintf("GRANT SELECT ON ALL TABLES IN SCHEMA public TO %s", s.config.SandboxUser),
-		fmt.Sprintf(`
-			ALTER DEFAULT PRIVILEGES IN SCHEMA public
-			GRANT SELECT ON TABLES TO %s
-		`, s.config.SandboxUser),
+		// Allow user to connect and create temp tables
+		fmt.Sprintf(`GRANT CONNECT, TEMP ON DATABASE %s TO %s`, dbName, s.config.SandboxUser),
+
+		// Schema privileges: allow usage and object creation
+		fmt.Sprintf(`GRANT USAGE, CREATE ON SCHEMA public TO %s`, s.config.SandboxUser),
+
+		// Table privileges: full DML on existing tables
+		fmt.Sprintf(`GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO %s`, s.config.SandboxUser),
+
+		// Sequence privileges (needed for SERIAL/IDENTITY)
+		fmt.Sprintf(`GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO %s`, s.config.SandboxUser),
+
+		// Default privileges for future tables
+		fmt.Sprintf(`ALTER DEFAULT PRIVILEGES IN SCHEMA public
+                    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO %s`, s.config.SandboxUser),
+
+		// Default privileges for future sequences
+		fmt.Sprintf(`ALTER DEFAULT PRIVILEGES IN SCHEMA public
+                    GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO %s`, s.config.SandboxUser),
+
+		// Optional: revoke dangerous access (just in case)
+		fmt.Sprintf(`REVOKE ALL ON DATABASE postgres FROM %s`, s.config.SandboxUser),
+		fmt.Sprintf(`REVOKE CREATE ON SCHEMA pg_catalog FROM %s`, s.config.SandboxUser),
+		fmt.Sprintf(`REVOKE ALL ON SCHEMA information_schema FROM %s`, s.config.SandboxUser),
 	}
 
 	for _, stmt := range stmts {
@@ -273,6 +290,21 @@ func (s *SandboxManager) grantSandboxPrivileges(dbName string) error {
 			return err
 		}
 	}
+
+	// Optional: apply per-user safe defaults
+	defaultSettings := []string{
+		fmt.Sprintf(`ALTER ROLE %s SET statement_timeout = '3000ms'`, s.config.SandboxUser),
+		fmt.Sprintf(`ALTER ROLE %s SET work_mem = '16MB'`, s.config.SandboxUser),
+		fmt.Sprintf(`ALTER ROLE %s SET allow_system_table_mods = off`, s.config.SandboxUser),
+	}
+
+	for _, stmt := range defaultSettings {
+		if _, err := db.Exec(stmt); err != nil {
+			slog.Error("default setting error", "statement", stmt, "error", err)
+			return err
+		}
+	}
+
 	return nil
 }
 
