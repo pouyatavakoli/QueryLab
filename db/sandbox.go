@@ -55,23 +55,18 @@ func NewSandboxManager(cfg *DBConfig) *SandboxManager {
 	return sm
 }
 
-// GetOrCreateSession gets existing session or creates a new one
-// Call this on page load/refresh to renew the session
 func (s *SandboxManager) GetOrCreateSession(sessionID string) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Check if session exists and is still valid
+	// If session already exists, just return the existing DB
 	if entry, exists := s.sandboxes[sessionID]; exists {
-		// Clean up old database before creating new one
-		if err := s.dropDB(entry.dbName); err != nil {
-			slog.Warn("failed to drop old database", "dbName", entry.dbName, "error", err)
-		}
-		// Remove old entry
-		delete(s.sandboxes, sessionID)
+		// Update last activity to keep session alive
+		entry.lastActivity = time.Now()
+		return entry.dbName, nil
 	}
 
-	// Generate new sandbox database
+	// Otherwise, create a new sandbox database
 	dbName := "sandbox_" + s.randomString(6)
 
 	if err := s.createDB(dbName); err != nil {
@@ -81,14 +76,12 @@ func (s *SandboxManager) GetOrCreateSession(sessionID string) (string, error) {
 
 	if err := s.initDB(dbName); err != nil {
 		slog.Error("failed to init database", "dbName", dbName, "error", err)
-		// Clean up on error
 		_ = s.dropDB(dbName)
 		return "", err
 	}
 
 	if err := s.grantSandboxPrivileges(dbName); err != nil {
 		slog.Error("failed to grant sandbox privileges", "dbName", dbName, "error", err)
-		// Clean up on error
 		_ = s.dropDB(dbName)
 		return "", err
 	}
@@ -227,9 +220,26 @@ func (s *SandboxManager) dropDB(name string) error {
 	}
 	defer db.Close()
 
-	_, err = db.Exec(fmt.Sprintf("DROP DATABASE IF EXISTS %s", name))
-	return err
+	// Terminate all connections to the target database
+	_, err = db.Exec(fmt.Sprintf(`
+		SELECT pg_terminate_backend(pid)
+		FROM pg_stat_activity
+		WHERE datname = '%s' AND pid <> pg_backend_pid()`, name))
+	if err != nil {
+		slog.Warn("failed to terminate connections", "dbName", name, "error", err)
+	}
+
+	// Force drop the database
+	_, err = db.Exec(fmt.Sprintf("DROP DATABASE IF EXISTS %s WITH (FORCE)", name))
+	if err != nil {
+		slog.Error("failed to drop database", "dbName", name, "error", err)
+		return err
+	}
+
+	slog.Info("database dropped successfully", "dbName", name)
+	return nil
 }
+
 
 func (s *SandboxManager) initDB(name string) error {
 	db, err := s.adminConn(name)
