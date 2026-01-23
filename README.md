@@ -110,6 +110,8 @@ go run cmd/server/main.go
 
 * Show only table headers when the table is empty (currently shows nothing)
 * Move utility functions out of main files for better code organization
+* add multiple schemas for user to select from
+  * add ability to see the db schema currently working on
 
 
 ## Security Notes
